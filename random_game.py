@@ -32,8 +32,21 @@ NSFW_TAG_IDS = "5611,12095"
 
 RATE_LIMIT_RETRY_AFTER = 60
 
+STEAM_CATEGORIES = {
+    "singleplayer": 4182,
+    "indie": 492,
+    "action": 19,
+    "casual": 597,
+    "adventure": 21,
+    "2d": 3871,
+    "3d": 4191,
+    "simulation": 599,
+    "strategy": 9,
+    "rpg": 122,
+}
 
-def get_total_count(*, mode: str = "normal") -> int:
+
+def get_total_count(*, mode: str = "normal", category: int | None = None) -> int:
     params = {
         "query": "",
         "start": 0,
@@ -47,6 +60,11 @@ def get_total_count(*, mode: str = "normal") -> int:
     elif mode == "nsfw_only":
         params["ignore_preferences"] = "1"
         params["tags"] = NSFW_TAG_IDS
+    if category:
+        if "tags" in params:
+            params["tags"] += f",{category}"
+        else:
+            params["tags"] = category
     resp = steam_get(SEARCH_URL, params=params, headers=HEADERS, cookies=cookies)
     resp.raise_for_status()
     return resp.json()["total_count"]
@@ -72,11 +90,11 @@ APP_RE = re.compile(r'<a\s+href="https://store\.steampowered\.com/app/(\d+)/[^"]
 NAME_RE = re.compile(r'class="title">([^<]+)</span>')
 
 
-def fetch_all_nsfw_apps() -> list[dict]:
+def fetch_all_nsfw_apps(category: int | None = None) -> list[dict]:
     all_games = []
     start = 0
     while True:
-        games = fetch_search_page(start, mode="nsfw_only")
+        games = fetch_search_page(start, mode="nsfw_only", category=category)
         if not games:
             break
         all_games.extend(games)
@@ -87,7 +105,7 @@ def fetch_all_nsfw_apps() -> list[dict]:
     return all_games
 
 
-def fetch_search_page(start: int, count: int = 100, *, mode: str = "normal") -> list[dict]:
+def fetch_search_page(start: int, count: int = 100, *, mode: str = "normal", category: int | None = None) -> list[dict]:
     params = {
         "query": "",
         "start": start,
@@ -101,6 +119,12 @@ def fetch_search_page(start: int, count: int = 100, *, mode: str = "normal") -> 
     elif mode == "nsfw_only":
         params["ignore_preferences"] = "1"
         params["tags"] = NSFW_TAG_IDS
+    if category:
+        if "tags" in params:
+            params["tags"] += f",{category}"
+        else:
+            params["tags"] = category
+
     try:
         resp = steam_get(SEARCH_URL, params=params, headers=HEADERS, cookies=cookies)
         resp.raise_for_status()
@@ -155,13 +179,13 @@ def check_app_details(appid: int, *, mode: str = "normal") -> dict | str:
         return "request failed"
 
 
-def pick_random_game(*, mode: str = "normal") -> dict:
+def pick_random_game(*, mode: str = "normal", category: int | None = None) -> dict:
     attempts = 0
     max_attempts = 30
 
     if mode == "nsfw_only":
         print("Fetching all NSFW games...")
-        pool = fetch_all_nsfw_apps()
+        pool = fetch_all_nsfw_apps(category=category)
         if not pool:
             print("No NSFW games found.")
             sys.exit(1)
@@ -181,7 +205,7 @@ def pick_random_game(*, mode: str = "normal") -> dict:
         print("\nNo valid NSFW game found.")
         sys.exit(1)
 
-    max_start = (get_total_count(mode=mode) // 100) * 100
+    max_start = (get_total_count(mode=mode, category=category) // 100) * 100
     print("Searching for a random game...")
 
     for _ in range(max_attempts):
@@ -189,7 +213,7 @@ def pick_random_game(*, mode: str = "normal") -> dict:
         start = random.randint(0, max_start // 100) * 100
         print(f"  [{attempts}] Fetching search page at offset {start}...", end=" ", flush=True)
 
-        games = fetch_search_page(start, mode=mode)
+        games = fetch_search_page(start, mode=mode, category=category)
         if not games:
             print("no results, trying another page")
             time.sleep(0.5)
@@ -251,6 +275,7 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--nsfw", action="store_true", help="Include NSFW games in results")
     group.add_argument("--nsfw-only", action="store_true", help="Only pick NSFW games")
+    parser.add_argument("--category", type=str, choices=STEAM_CATEGORIES.keys(), help="Pick games by category")
     args = parser.parse_args()
 
     if args.nsfw_only:
@@ -260,7 +285,7 @@ def main() -> None:
     else:
         mode = "normal"
 
-    game = pick_random_game(mode=mode)
+    game = pick_random_game(mode=mode, category=STEAM_CATEGORIES.get(args.category))
     display_game(game)
 
 
