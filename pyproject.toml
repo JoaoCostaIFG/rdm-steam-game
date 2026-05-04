@@ -1,0 +1,18 @@
+[project]
+name = "rdm-steam-game"
+version = "1.0.0"
+description = "Pick a random game from the Steam store"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "JoaoCostaIFG" }]
+dependencies = ["requests>=2.31.0"]
+
+[project.scripts]
+rdm-steam-game = "random_game:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
